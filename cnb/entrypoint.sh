@@ -238,85 +238,6 @@ if [ "$1" = "--sync" ]; then
     exit $?
 fi
 
-rm -f /root/syncflag.txt
-
-# ============================================
-# FRPC 内网穿透
-# ============================================
-FRPC_CONFIG_URL="${FRPC_CONFIG_URL:-}"
-FRPC_PID_FILE="/var/run/frpc.pid"
-FRPC_LOG_FILE="/var/log/frpc.log"
-FRPC_CONFIG_FILE="/etc/frpc.toml"
-
-# 函数: 启动 frpc
-start_frpc() {
-    if [ -z "$FRPC_CONFIG_URL" ]; then
-        echo "[FRPC] 未配置 FRPC_CONFIG_URL，跳过启动"
-        return 1
-    fi
-
-    # 检查是否已运行
-    if [ -f "$FRPC_PID_FILE" ] && kill -0 $(cat "$FRPC_PID_FILE") 2>/dev/null; then
-        echo "[FRPC] frpc 已在运行 (PID: $(cat $FRPC_PID_FILE))"
-        return 0
-    fi
-
-    # 备份旧配置文件
-    if [ -f "$FRPC_CONFIG_FILE" ]; then
-        mv "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_FILE.bak.$(date +%s)"
-        echo "[FRPC] 已备份旧配置文件"
-    fi
-
-    echo "[FRPC] 下载配置文件..."
-    if ! wget -q -O "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_URL" ; then
-        echo "[FRPC] 配置文件下载失败"
-        return 1
-    fi
-
-    echo "[FRPC] 启动 frpc..."
-    nohup /usr/local/bin/frpc -c "$FRPC_CONFIG_FILE" > "$FRPC_LOG_FILE" 2>&1 &
-    local pid=$!
-    echo $pid > "$FRPC_PID_FILE"
-    echo "[FRPC] frpc 已启动 (PID: $pid)，日志: $FRPC_LOG_FILE"
-}
-
-# 函数: 停止 frpc
-stop_frpc() {
-    if [ -f "$FRPC_PID_FILE" ]; then
-        local pid=$(cat "$FRPC_PID_FILE")
-        if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
-            rm -f "$FRPC_PID_FILE"
-            echo "[FRPC] frpc 已停止"
-        else
-            rm -f "$FRPC_PID_FILE"
-            echo "[FRPC] frpc 未运行，清理 PID 文件"
-        fi
-    else
-        echo "[FRPC] frpc 未运行"
-    fi
-}
-
-# 函数: 重启 frpc
-restart_frpc() {
-    stop_frpc
-    sleep 1
-    start_frpc
-}
-
-# 支持 --frp 参数
-if [ "$1" = "--frp" ]; then
-    case "$2" in
-        start)   start_frpc; exit $? ;;
-        stop)    stop_frpc; exit $? ;;
-        restart) restart_frpc; exit $? ;;
-        *)       echo "用法: $0 --frp [start|stop|restart]"; exit 1 ;;
-    esac
-fi
-
-# ============================================
-# Vibespace 管理菜单
-# ============================================
 # 支持 --commands 参数（交互式菜单）
 if [ "$1" = "--commands" ]; then
     echo "============================================"
@@ -389,6 +310,72 @@ if [ "$1" = "--commands" ]; then
     esac
     exit 0
 fi
+
+rm -f /root/syncflag.txt
+
+# ============================================
+# FRPC 内网穿透
+# ============================================
+FRPC_CONFIG_URL="${FRPC_CONFIG_URL:-}"
+FRPC_PID_FILE="/var/run/frpc.pid"
+FRPC_LOG_FILE="/var/log/frpc.log"
+FRPC_CONFIG_FILE="/etc/frpc.toml"
+
+# 函数: 启动 frpc
+start_frpc() {
+    if [ -z "$FRPC_CONFIG_URL" ]; then
+        echo "[FRPC] 未配置 FRPC_CONFIG_URL，跳过启动"
+        return 1
+    fi
+
+    # 检查是否已运行
+    if [ -f "$FRPC_PID_FILE" ] && kill -0 $(cat "$FRPC_PID_FILE") 2>/dev/null; then
+        echo "[FRPC] frpc 已在运行 (PID: $(cat $FRPC_PID_FILE))"
+        return 0
+    fi
+
+    # 备份旧配置文件
+    if [ -f "$FRPC_CONFIG_FILE" ]; then
+        mv "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_FILE.bak.$(date +%s)"
+        echo "[FRPC] 已备份旧配置文件"
+    fi
+
+    echo "[FRPC] 下载配置文件..."
+    if ! wget -q -O "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_URL" ; then
+        echo "[FRPC] 配置文件下载失败"
+        return 1
+    fi
+
+    echo "[FRPC] 启动 frpc..."
+    nohup /usr/local/bin/frpc -c "$FRPC_CONFIG_FILE" > "$FRPC_LOG_FILE" 2>&1 &
+    local pid=$!
+    echo $pid > "$FRPC_PID_FILE"
+    echo "[FRPC] frpc 已启动 (PID: $pid)，日志: $FRPC_LOG_FILE"
+}
+
+# 函数: 停止 frpc
+stop_frpc() {
+    if [ -f "$FRPC_PID_FILE" ]; then
+        local pid=$(cat "$FRPC_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            rm -f "$FRPC_PID_FILE"
+            echo "[FRPC] frpc 已停止"
+        else
+            rm -f "$FRPC_PID_FILE"
+            echo "[FRPC] frpc 未运行，清理 PID 文件"
+        fi
+    else
+        echo "[FRPC] frpc 未运行"
+    fi
+}
+
+# 函数: 重启 frpc
+restart_frpc() {
+    stop_frpc
+    sleep 1
+    start_frpc
+}
 
 # --- 从对象存储恢复 ---
 restore_snapshot
