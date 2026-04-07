@@ -10,7 +10,7 @@ ENV LANG=C.UTF-8 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates cron curl git nano openjdk-21-jdk openssh-client openssh-server python3 python3-pip unzip vim wget zstd maven \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get autoremove -y \
     && apt-get clean
