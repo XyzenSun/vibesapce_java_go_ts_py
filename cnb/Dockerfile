@@ -9,7 +9,7 @@ ENV LANG=C.UTF-8 \
 # 层1: 系统包 + 基础工具
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates cron curl git nano openjdk-21-jdk openssh-client openssh-server python3 python3-pip rclone unzip vim wget zstd \
+        ca-certificates cron curl git nano openjdk-21-jdk openssh-client openssh-server python3 python3-pip rclone unzip vim wget zstd maven \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get autoremove -y \
