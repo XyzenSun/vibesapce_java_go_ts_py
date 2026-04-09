@@ -236,71 +236,6 @@ if [ "$1" = "--sync" ]; then
     exit $?
 fi
 
-
-# ============================================
-# FRPC 内网穿透
-# ============================================
-FRPC_CONFIG_URL="${FRPC_CONFIG_URL:-}"
-FRPC_PID_FILE="/var/run/frpc.pid"
-FRPC_LOG_FILE="/var/log/frpc.log"
-FRPC_CONFIG_FILE="/etc/frpc.toml"
-
-# 函数: 启动 frpc
-start_frpc() {
-    if [ -z "$FRPC_CONFIG_URL" ]; then
-        echo "[FRPC] 未配置 FRPC_CONFIG_URL，跳过启动"
-        return 1
-    fi
-
-    # 检查是否已运行
-    if [ -f "$FRPC_PID_FILE" ] && kill -0 $(cat "$FRPC_PID_FILE") 2>/dev/null; then
-        echo "[FRPC] frpc 已在运行 (PID: $(cat $FRPC_PID_FILE))"
-        return 0
-    fi
-
-    # 备份旧配置文件
-    if [ -f "$FRPC_CONFIG_FILE" ]; then
-        mv "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_FILE.bak.$(date +%s)"
-        echo "[FRPC] 已备份旧配置文件"
-    fi
-
-    echo "[FRPC] 下载配置文件..."
-    if ! wget -q -O "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_URL" ; then
-        echo "[FRPC] 配置文件下载失败"
-        return 1
-    fi
-
-    echo "[FRPC] 启动 frpc..."
-    nohup /usr/local/bin/frpc -c "$FRPC_CONFIG_FILE" > "$FRPC_LOG_FILE" 2>&1 &
-    local pid=$!
-    echo $pid > "$FRPC_PID_FILE"
-    echo "[FRPC] frpc 已启动 (PID: $pid)，日志: $FRPC_LOG_FILE"
-}
-
-# 函数: 停止 frpc
-stop_frpc() {
-    if [ -f "$FRPC_PID_FILE" ]; then
-        local pid=$(cat "$FRPC_PID_FILE")
-        if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
-            rm -f "$FRPC_PID_FILE"
-            echo "[FRPC] frpc 已停止"
-        else
-            rm -f "$FRPC_PID_FILE"
-            echo "[FRPC] frpc 未运行，清理 PID 文件"
-        fi
-    else
-        echo "[FRPC] frpc 未运行"
-    fi
-}
-
-# 函数: 重启 frpc
-restart_frpc() {
-    stop_frpc
-    sleep 1
-    start_frpc
-}
-
 # 支持 --commands 参数（交互式菜单）
 if [ "$1" = "--commands" ]; then
     echo "============================================"
@@ -308,15 +243,10 @@ if [ "$1" = "--commands" ]; then
     echo "============================================"
     echo "  1. 上传到对象存储"
     echo "  2. 从对象存储下载并覆盖本地"
-    echo "  3. 启动 frpc"
-    echo "  4. 停止 frpc"
-    echo "  5. 重启 frpc"
-    echo "  6. 查看 frpc 状态"
-    echo "  7. 查看 frpc 日志"
-    echo "  8. 手动同步 (上传快照)"
+    echo "  3. 手动同步 (上传快照)"
     echo "  0. 退出"
     echo "============================================"
-    read -p "请选择操作 [0-8]: " choice
+    read -p "请选择操作 [0-3]: " choice
 
     case "$choice" in
         1)
@@ -330,35 +260,6 @@ if [ "$1" = "--commands" ]; then
             restore_snapshot
             ;;
         3)
-            echo "[操作] 启动 frpc..."
-            start_frpc
-            ;;
-        4)
-            echo "[操作] 停止 frpc..."
-            stop_frpc
-            ;;
-        5)
-            echo "[操作] 重启 frpc..."
-            restart_frpc
-            ;;
-        6)
-            echo "[操作] 查看 frpc 状态..."
-            if [ -f "$FRPC_PID_FILE" ] && kill -0 $(cat "$FRPC_PID_FILE") 2>/dev/null; then
-                echo "[FRPC] frpc 正在运行 (PID: $(cat $FRPC_PID_FILE))"
-            else
-                echo "[FRPC] frpc 未运行"
-            fi
-            ;;
-        7)
-            echo "[操作] 查看 frpc 日志..."
-            if [ -f "$FRPC_LOG_FILE" ]; then
-                echo "--- 最近 50 行日志 ---"
-                tail -50 "$FRPC_LOG_FILE"
-            else
-                echo "[FRPC] 日志文件不存在: $FRPC_LOG_FILE"
-            fi
-            ;;
-        8)
             echo "[操作] 手动同步 (上传快照)..."
             upload_snapshot
             ;;
@@ -410,24 +311,11 @@ if [ -n "$CS_PASSWORD" ]; then
     AUTH_ARGS="--auth password"
 fi
 
-# --- FRPC 内网穿透 ---
-# 下载 frpc 二进制并启动
-if [ -n "$FRPC_CONFIG_URL" ]; then
-    wget -q -O /usr/local/bin/frpc "https://raw.githubusercontent.com/XyzenSun/vibespace/refs/heads/main/assets/app/frpc_latest"
-    chmod +x /usr/local/bin/frpc
-    start_frpc
-fi
-
 # --- 设置定时同步 ---
 setup_periodic_sync
 
 # --- 启动SSH ---
 /usr/sbin/sshd
-
-# 启动时重启 frpc
-if [ -n "$FRPC_CONFIG_URL" ] && [ -f /usr/local/bin/frpc ]; then
-    restart_frpc
-fi
 
 # --- code-server (CNB 平台) ---
 # CNB 会自动注入 code-server 进程，检测是否已运行
