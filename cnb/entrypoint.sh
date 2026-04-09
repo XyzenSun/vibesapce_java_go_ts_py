@@ -226,9 +226,7 @@ CRON_EOF
     echo "[OSS] 定时同步已启用，间隔 ${OSS_SYNC_INTERVAL} 分钟"
 }
 
-# ============================================
-# 主流程
-# ============================================
+
 
 # 支持 --sync 参数，仅执行上传（用于 cron 定时任务）
 if [ "$1" = "--sync" ]; then
@@ -237,6 +235,71 @@ if [ "$1" = "--sync" ]; then
     upload_snapshot
     exit $?
 fi
+
+
+# ============================================
+# FRPC 内网穿透
+# ============================================
+FRPC_CONFIG_URL="${FRPC_CONFIG_URL:-}"
+FRPC_PID_FILE="/var/run/frpc.pid"
+FRPC_LOG_FILE="/var/log/frpc.log"
+FRPC_CONFIG_FILE="/etc/frpc.toml"
+
+# 函数: 启动 frpc
+start_frpc() {
+    if [ -z "$FRPC_CONFIG_URL" ]; then
+        echo "[FRPC] 未配置 FRPC_CONFIG_URL，跳过启动"
+        return 1
+    fi
+
+    # 检查是否已运行
+    if [ -f "$FRPC_PID_FILE" ] && kill -0 $(cat "$FRPC_PID_FILE") 2>/dev/null; then
+        echo "[FRPC] frpc 已在运行 (PID: $(cat $FRPC_PID_FILE))"
+        return 0
+    fi
+
+    # 备份旧配置文件
+    if [ -f "$FRPC_CONFIG_FILE" ]; then
+        mv "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_FILE.bak.$(date +%s)"
+        echo "[FRPC] 已备份旧配置文件"
+    fi
+
+    echo "[FRPC] 下载配置文件..."
+    if ! wget -q -O "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_URL" ; then
+        echo "[FRPC] 配置文件下载失败"
+        return 1
+    fi
+
+    echo "[FRPC] 启动 frpc..."
+    nohup /usr/local/bin/frpc -c "$FRPC_CONFIG_FILE" > "$FRPC_LOG_FILE" 2>&1 &
+    local pid=$!
+    echo $pid > "$FRPC_PID_FILE"
+    echo "[FRPC] frpc 已启动 (PID: $pid)，日志: $FRPC_LOG_FILE"
+}
+
+# 函数: 停止 frpc
+stop_frpc() {
+    if [ -f "$FRPC_PID_FILE" ]; then
+        local pid=$(cat "$FRPC_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            rm -f "$FRPC_PID_FILE"
+            echo "[FRPC] frpc 已停止"
+        else
+            rm -f "$FRPC_PID_FILE"
+            echo "[FRPC] frpc 未运行，清理 PID 文件"
+        fi
+    else
+        echo "[FRPC] frpc 未运行"
+    fi
+}
+
+# 函数: 重启 frpc
+restart_frpc() {
+    stop_frpc
+    sleep 1
+    start_frpc
+}
 
 # 支持 --commands 参数（交互式菜单）
 if [ "$1" = "--commands" ]; then
@@ -310,72 +373,11 @@ if [ "$1" = "--commands" ]; then
     esac
     exit 0
 fi
-
+# ============================================
+# 容器启动执行
+# ============================================
 rm -f /root/syncflag.txt
 
-# ============================================
-# FRPC 内网穿透
-# ============================================
-FRPC_CONFIG_URL="${FRPC_CONFIG_URL:-}"
-FRPC_PID_FILE="/var/run/frpc.pid"
-FRPC_LOG_FILE="/var/log/frpc.log"
-FRPC_CONFIG_FILE="/etc/frpc.toml"
-
-# 函数: 启动 frpc
-start_frpc() {
-    if [ -z "$FRPC_CONFIG_URL" ]; then
-        echo "[FRPC] 未配置 FRPC_CONFIG_URL，跳过启动"
-        return 1
-    fi
-
-    # 检查是否已运行
-    if [ -f "$FRPC_PID_FILE" ] && kill -0 $(cat "$FRPC_PID_FILE") 2>/dev/null; then
-        echo "[FRPC] frpc 已在运行 (PID: $(cat $FRPC_PID_FILE))"
-        return 0
-    fi
-
-    # 备份旧配置文件
-    if [ -f "$FRPC_CONFIG_FILE" ]; then
-        mv "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_FILE.bak.$(date +%s)"
-        echo "[FRPC] 已备份旧配置文件"
-    fi
-
-    echo "[FRPC] 下载配置文件..."
-    if ! wget -q -O "$FRPC_CONFIG_FILE" "$FRPC_CONFIG_URL" ; then
-        echo "[FRPC] 配置文件下载失败"
-        return 1
-    fi
-
-    echo "[FRPC] 启动 frpc..."
-    nohup /usr/local/bin/frpc -c "$FRPC_CONFIG_FILE" > "$FRPC_LOG_FILE" 2>&1 &
-    local pid=$!
-    echo $pid > "$FRPC_PID_FILE"
-    echo "[FRPC] frpc 已启动 (PID: $pid)，日志: $FRPC_LOG_FILE"
-}
-
-# 函数: 停止 frpc
-stop_frpc() {
-    if [ -f "$FRPC_PID_FILE" ]; then
-        local pid=$(cat "$FRPC_PID_FILE")
-        if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
-            rm -f "$FRPC_PID_FILE"
-            echo "[FRPC] frpc 已停止"
-        else
-            rm -f "$FRPC_PID_FILE"
-            echo "[FRPC] frpc 未运行，清理 PID 文件"
-        fi
-    else
-        echo "[FRPC] frpc 未运行"
-    fi
-}
-
-# 函数: 重启 frpc
-restart_frpc() {
-    stop_frpc
-    sleep 1
-    start_frpc
-}
 
 # --- 从对象存储恢复 ---
 restore_snapshot
@@ -419,52 +421,7 @@ fi
 # --- 设置定时同步 ---
 setup_periodic_sync
 
-# --- README ---
-cat > /workspace/README.md << 'READMEEOF'
-# Development Environment
-
-## 已安装的工具
-
-### 编程语言
-- Node.js / Ts / npm
-- Go
-- Python
-- Java
-
-### AI 工具
-- CC-Switch: ClaudeCode/Codex 提供商 MCP Skils管理工具
-- Claude Code: Anthropic CLI 开发工具
-- CCLine: Claude Code 状态行工具
-- Claude Code Router: 将Gemini/Openai格式转换为anthropic格式
-
-### Claude Code 输出样式
-- **默认**: Claude Code 默认输出样式
-
-### 快捷命令
-输入 `vibe` 即可执行: `IS_SANDBOX=1 claude --dangerously-skip-permissions`
-
-## 环境变量
-- `ROOT_PASSWORD`: SSH root 密码 (默认: root123)
-- `GIT_USER_NAME`: Git 用户名
-- `GIT_USER_EMAIL`: Git 邮箱
-- `SSH_PUBLIC_KEY`: SSH 公钥 (用于连接容器)
-- `CS_PASSWORD`: Code-Server 密码 (不设置则免密)
-- `FRPC_CONFIG_URL`: frpc 配置文件下载地址
-
-### 对象存储持久化
-- `OSS_ENABLED`: 启用持久化 (true/false)
-- `OSS_ENDPOINT`: S3 endpoint
-- `OSS_ACCESS_KEY`: Access Key ID
-- `OSS_SECRET_KEY`: Secret Access Key
-- `OSS_BUCKET`: 桶名
-- `OSS_REGION`: 区域 (默认 auto)
-- `OSS_PROJECT`: 项目名，用于快照文件命名前缀 (默认 devbox)
-- `OSS_PATHS`: 持久化目录列表 (逗号分隔)
-- `OSS_KEEP_COUNT`: 保留快照数 (默认 5)
-- `OSS_SYNC_INTERVAL`: 同步间隔分钟 (默认 5)
-READMEEOF
-
-# --- 启动 ---
+# --- 启动SSH ---
 /usr/sbin/sshd
 
 # 启动时重启 frpc
