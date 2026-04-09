@@ -37,21 +37,44 @@ RUN curl -fsSL https://raw.githubusercontent.com/coder/code-server/main/install.
     && rm -rf /tmp/*
 
 # 层5b: code-server 扩展
-RUN code-server --install-extension MS-CEINTL.vscode-language-pack-zh-hans \
-    && code-server --install-extension GitHub.github-vscode-theme \
-    && code-server --install-extension DavidAnson.vscode-markdownlint \
-    && code-server --install-extension g2developer.browser-in-vscode \
-    && code-server --install-extension saltcoreyan.json-format-sortcore \
-    && code-server --install-extension redhat.vscode-yaml \
-    && code-server --install-extension Anthropic.claude-code \
-    && code-server --install-extension golang.go \
-    && code-server --install-extension eamodio.gitlens \
-    && code-server --install-extension RooVeterinaryInc.roo-cline \
-    && code-server --install-extension streetsidesoftware.code-spell-checker \
-    && code-server --install-extension aminer.codegeex \
-    && code-server --install-extension ms-python.python \
-    && code-server --install-extension Pleiades.java-extension-pack-jdk \
-    && rm -rf /tmp/* /root/.cache
+# 层5b: code-server 扩展
+RUN set -eu; \
+    extensions=" \
+      MS-CEINTL.vscode-language-pack-zh-hans \
+      GitHub.github-vscode-theme \
+      DavidAnson.vscode-markdownlint \
+      g2developer.browser-in-vscode \
+      saltcoreyan.json-format-sortcore \
+      redhat.vscode-yaml \
+      Anthropic.claude-code \
+      golang.go \
+      eamodio.gitlens \
+      RooVeterinaryInc.roo-cline \
+      streetsidesoftware.code-spell-checker \
+      aminer.codegeex \
+      ms-python.python \
+      Pleiades.java-extension-pack-jdk \
+    "; \
+    for ext in $extensions; do \
+      echo "=================================================="; \
+      echo "Installing extension: $ext"; \
+      echo "=================================================="; \
+      log_file="/tmp/${ext##*.}.install.log"; \
+      if code-server --install-extension "$ext" >"$log_file" 2>&1; then \
+        echo "[OK] Installed: $ext"; \
+        cat "$log_file"; \
+        rm -f "$log_file"; \
+      else \
+        status=$?; \
+        echo "[ERROR] Failed to install extension: $ext"; \
+        echo "-------- Begin install log: $ext --------"; \
+        cat "$log_file" || true; \
+        echo "--------- End install log: $ext ---------"; \
+        exit "$status"; \
+      fi; \
+    done; \
+    rm -rf /tmp/* /root/.cache
+
 
 # 层6: AI 工具
 RUN npm install -g @anthropic-ai/claude-code@2.1.71 @cometix/ccline @musistudio/claude-code-router \
