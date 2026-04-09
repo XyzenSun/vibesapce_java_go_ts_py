@@ -47,7 +47,6 @@ RUN code-server --install-extension MS-CEINTL.vscode-language-pack-zh-hans \
     && code-server --install-extension golang.go \
     && code-server --install-extension eamodio.gitlens \
     && code-server --install-extension RooVeterinaryInc.roo-cline \
-    && code-server --install-extension FittenTech.Fitten-Code \
     && code-server --install-extension streetsidesoftware.code-spell-checker \
     && code-server --install-extension aminer.codegeex \
     && code-server --install-extension ms-python.python \
