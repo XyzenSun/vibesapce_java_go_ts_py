@@ -76,10 +76,12 @@ RUN mkdir -p /run/sshd \
 # 备份 /root，防止 volume 挂载覆盖镜像内文件
 RUN mkdir /root-defaults && cp -a /root /root-defaults
 
-# 创建 vibespace 管理命令
+# 创建 vibespace 管理命令，禁用 Git commit/tag 签名
 RUN echo '#!/bin/bash' > /usr/local/bin/vibespace \
     && echo '/usr/local/bin/entrypoint.sh --commands' >> /usr/local/bin/vibespace \
-    && chmod +x /usr/local/bin/vibespace
+    && chmod +x /usr/local/bin/vibespace \
+    && git config --system tag.gpgSign false \
+    && git config --system commit.gpgsign false
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
