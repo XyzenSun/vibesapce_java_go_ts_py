@@ -17,6 +17,8 @@ jobs:
             context: ./cnb
           - tag: local
             context: ./local
+          - tag: modalspace
+            context: ./modalspace
 
     steps:
       - name: Checkout repository
